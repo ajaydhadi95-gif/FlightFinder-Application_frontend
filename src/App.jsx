@@ -3,7 +3,7 @@ import { CITIES, searchFlights } from "./data";
 import "./App.css";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:8080/api/bookings";
+  import.meta.env.VITE_API_URL || "/api/bookings";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
