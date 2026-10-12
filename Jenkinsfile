@@ -136,15 +136,14 @@ pipeline {
 
     post {
         success {
-            echo 'SUCCESS: Frontend deployed to EKS.'
+            echo "Deployment Successful!"
+            cleanWs()
+            sh 'docker image prune -f'
         }
 
         failure {
-            echo 'FAILED: Check the Jenkins Console Output for the failed stage.'
-        }
-
-        always {
-            echo 'Pipeline execution completed.'
+            echo "Deployment Failed!"
+            cleanWs()
         }
     }
 }
