@@ -25,7 +25,6 @@
 | | |
 | --- | --- |
 | **Application** | Booking App frontend (SPA) |
-| **Stack** | React.js, Vite, Bootstrap 5, Axios, React Router |
 | **Container** | Multi-stage Docker build, served by Nginx on port 80 |
 | **CI/CD** | GitHub, Jenkins, Docker Hub |
 | **Platform** | Amazon EKS (`devops-eks`), Kubernetes Deployment + Service |
