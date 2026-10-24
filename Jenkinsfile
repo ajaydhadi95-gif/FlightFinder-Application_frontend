@@ -11,6 +11,7 @@ pipeline {
 
         APP_NAME     = 'booking-frontend'
         SERVICE_NAME = 'booking-frontend-service'
+        CANARY_NAME  = 'booking-frontend-canary'
     }
 
     stages {
@@ -99,38 +100,38 @@ pipeline {
                     set -eu
                     export KUBECONFIG="${KUBECONFIG}"
 
-                    echo "Applying stable and canary resources..."
-
+                    echo "Applying Kubernetes resources..."
                     kubectl apply -f k8s/frontend.yaml
 
                     echo "Updating stable frontend image..."
                     kubectl set image deployment/${APP_NAME} \
                       ${APP_NAME}=${IMAGE_NAME}:${IMAGE_TAG}
 
-                    echo "Waiting for stable deployment..."
+                    echo "Updating canary frontend image..."
+                    kubectl set image deployment/${CANARY_NAME} \
+                      booking-frontend=${IMAGE_NAME}:${IMAGE_TAG}
+
+                    echo "Waiting for stable rollout..."
                     kubectl rollout status deployment/${APP_NAME} \
                       --timeout=180s
 
-                    echo "Checking canary deployment..."
-                    if kubectl get deployment booking-frontend-canary \
-                         >/dev/null 2>&1; then
+                    echo "Waiting for canary rollout..."
+                    kubectl rollout status deployment/${CANARY_NAME} \
+                      --timeout=180s
 
-                        echo "Waiting for canary deployment..."
-                        kubectl rollout status \
-                          deployment/booking-frontend-canary \
-                          --timeout=180s
-                    else
-                        echo "Canary deployment not found."
-                        exit 1
-                    fi
+                    echo "Verifying desired replicas..."
+                    kubectl get deployments ${APP_NAME} ${CANARY_NAME}
 
-                    echo "Final deployment status:"
-                    kubectl get deployments
+                    echo "Checking pods..."
                     kubectl get pods -o wide
+
+                    echo "Checking services..."
                     kubectl get services
 
                     echo "Production frontend service:"
                     kubectl get svc ${SERVICE_NAME}
+
+                    echo "Deployment verification completed."
                 '''
             }
         }
@@ -144,7 +145,7 @@ pipeline {
         }
 
         failure {
-            echo 'Deployment Failed! Check the stage logs.'
+            echo 'Deployment Failed! Check the failed stage logs.'
             cleanWs()
         }
     }
