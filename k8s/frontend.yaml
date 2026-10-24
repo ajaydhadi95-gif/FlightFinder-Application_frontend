@@ -1,3 +1,5 @@
+
+# 1. Stable Frontend Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,10 +9,12 @@ spec:
   selector:
     matchLabels:
       app: booking-frontend
+      version: stable
   template:
     metadata:
       labels:
         app: booking-frontend
+        version: stable
     spec:
       containers:
         - name: booking-frontend
@@ -27,6 +31,7 @@ spec:
               memory: "256Mi"
 
 ---
+# 2. Stable Frontend Service
 apiVersion: v1
 kind: Service
 metadata:
@@ -35,6 +40,55 @@ spec:
   type: LoadBalancer
   selector:
     app: booking-frontend
+    version: stable
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+
+---
+# 3. Canary Frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booking-frontend-canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: booking-frontend
+      version: canary
+  template:
+    metadata:
+      labels:
+        app: booking-frontend
+        version: canary
+    spec:
+      containers:
+        - name: booking-frontend
+          image: ajaydhadi95/booking_frontend:canary-v2
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+
+---
+# 4. Canary Frontend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: booking-frontend-canary-service
+spec:
+  type: ClusterIP
+  selector:
+    app: booking-frontend
+    version: canary
   ports:
     - port: 80
       targetPort: 80
