@@ -91,48 +91,44 @@ pipeline {
             }
         }
 
-        stage('Deploy to EKS') {
-            steps {
-                sh '''
-                    set -e
+        
+stage('Deploy to EKS') {
+    steps {
+        sh '''
+            set -eu
 
-                    echo "Creating or updating deployment..."
+            echo "Deploying frontend stable and canary resources..."
 
-                    kubectl create deployment ${APP_NAME} \
-                      --image=${IMAGE_NAME}:${IMAGE_TAG} \
-                      --dry-run=client -o yaml | kubectl apply -f -
+            # Verify Kubernetes manifest exists
+            test -f k8s/frontend.yaml
 
-                    echo "Updating application image..."
+            # Update the stable image to the image built in this pipeline.
+            # The manifest must contain a container named booking-frontend.
+            
+            kubectl set image deployment/booking-frontend \
+              booking-frontend=${IMAGE_NAME}:${IMAGE_TAG} \
+              --record=false
 
-                    kubectl set image deployment/${APP_NAME} \
-                      ${APP_NAME}=${IMAGE_NAME}:${IMAGE_TAG} \
-                      --record=false 2>/dev/null || \
-                    kubectl set image deployment/${APP_NAME} \
-                      $(kubectl get deployment ${APP_NAME} \
-                        -o jsonpath='{.spec.template.spec.containers[0].name}')=${IMAGE_NAME}:${IMAGE_TAG}
+            # Apply the stable and canary Kubernetes resources
+            kubectl apply -f k8s/frontend.yaml
 
-                    echo "Waiting for rollout..."
+            echo "Waiting for stable rollout..."
+            kubectl rollout status deployment/booking-frontend \
+              --timeout=180s
 
-                    kubectl rollout status deployment/${APP_NAME} \
-                      --timeout=180s
+            echo "Waiting for canary rollout..."
+            if kubectl get deployment booking-frontend-canary >/dev/null 2>&1; then
+                kubectl rollout status deployment/booking-frontend-canary \
+                  --timeout=180s
+            fi
 
-                    echo "Creating LoadBalancer service..."
-
-                    kubectl expose deployment ${APP_NAME} \
-                      --name=${SERVICE_NAME} \
-                      --type=LoadBalancer \
-                      --port=80 \
-                      --target-port=80 \
-                      --dry-run=client -o yaml | kubectl apply -f -
-
-                    echo "Deployment status:"
-                    kubectl get deployments
-                    kubectl get pods -o wide
-                    kubectl get svc ${SERVICE_NAME}
-                '''
-            }
-        }
+            echo "Deployment status:"
+            kubectl get deployments
+            kubectl get pods -o wide
+            kubectl get services
+        '''
     }
+}
 
     post {
         success {
