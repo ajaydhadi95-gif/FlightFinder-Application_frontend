@@ -4,12 +4,14 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: booking-frontend
+  labels:
+    app: booking-frontend
+    version: stable
 spec:
   replicas: 3
   selector:
     matchLabels:
       app: booking-frontend
-      version: stable
   template:
     metadata:
       labels:
@@ -29,6 +31,18 @@ spec:
             limits:
               cpu: "250m"
               memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 20
 
 ---
 # 2. Stable Frontend Service
@@ -42,7 +56,8 @@ spec:
     app: booking-frontend
     version: stable
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 80
       protocol: TCP
 
@@ -52,6 +67,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: booking-frontend-canary
+  labels:
+    app: booking-frontend
+    version: canary
 spec:
   replicas: 1
   selector:
@@ -77,6 +95,18 @@ spec:
             limits:
               cpu: "250m"
               memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 20
 
 ---
 # 4. Canary Frontend Service
@@ -90,6 +120,7 @@ spec:
     app: booking-frontend
     version: canary
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 80
       protocol: TCP
