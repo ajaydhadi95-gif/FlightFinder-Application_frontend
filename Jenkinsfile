@@ -2,14 +2,14 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION  = 'ap-south-1'
-        EKS_CLUSTER = 'devops-eks'
-        KUBECONFIG  = '/var/lib/jenkins/.kube/config'
+        AWS_REGION   = 'ap-south-1'
+        EKS_CLUSTER  = 'devops-eks'
+        KUBECONFIG   = '/var/lib/jenkins/.kube/config'
 
-        IMAGE_NAME  = 'ajaydhadi95/booking_frontend'
-        IMAGE_TAG   = "${BUILD_NUMBER}"
+        IMAGE_NAME   = 'ajaydhadi95/booking_frontend'
+        IMAGE_TAG    = "${BUILD_NUMBER}"
 
-        APP_NAME    = 'booking-frontend'
+        APP_NAME     = 'booking-frontend'
         SERVICE_NAME = 'booking-frontend-service'
     }
 
@@ -24,7 +24,7 @@ pipeline {
         stage('Verify Project') {
             steps {
                 sh '''
-                    set -eux
+                    set -eu
 
                     echo "Checking frontend project..."
                     pwd
@@ -33,6 +33,7 @@ pipeline {
                     test -f package.json
                     test -f Dockerfile
                     test -f nginx.conf
+                    test -f k8s/frontend.yaml
 
                     echo "Frontend files verified."
                 '''
@@ -42,13 +43,13 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh '''
-                    set -e
+                    set -eu
 
                     docker build \
                       -t ${IMAGE_NAME}:${IMAGE_TAG} \
                       .
 
-                    echo "Docker image built successfully."
+                    echo "Built image: ${IMAGE_NAME}:${IMAGE_TAG}"
                 '''
             }
         }
@@ -80,67 +81,71 @@ pipeline {
         stage('Connect to EKS') {
             steps {
                 sh '''
-                    set -e
+                    set -eu
+                    export KUBECONFIG="${KUBECONFIG}"
 
                     aws eks update-kubeconfig \
-                      --region ${AWS_REGION} \
-                      --name ${EKS_CLUSTER}
+                      --region "${AWS_REGION}" \
+                      --name "${EKS_CLUSTER}"
 
                     kubectl get nodes
                 '''
             }
         }
 
-        
-stage('Deploy to EKS') {
-    steps {
-        sh '''
-            set -eu
+        stage('Deploy to EKS') {
+            steps {
+                sh '''
+                    set -eu
+                    export KUBECONFIG="${KUBECONFIG}"
 
-            echo "Deploying frontend stable and canary resources..."
+                    echo "Applying stable and canary resources..."
 
-            # Verify Kubernetes manifest exists
-            test -f k8s/frontend.yaml
+                    kubectl apply -f k8s/frontend.yaml
 
-            # Update the stable image to the image built in this pipeline.
-            # The manifest must contain a container named booking-frontend.
-            
-            kubectl set image deployment/booking-frontend \
-              booking-frontend=${IMAGE_NAME}:${IMAGE_TAG} \
-              --record=false
+                    echo "Updating stable frontend image..."
+                    kubectl set image deployment/${APP_NAME} \
+                      ${APP_NAME}=${IMAGE_NAME}:${IMAGE_TAG}
 
-            # Apply the stable and canary Kubernetes resources
-            kubectl apply -f k8s/frontend.yaml
+                    echo "Waiting for stable deployment..."
+                    kubectl rollout status deployment/${APP_NAME} \
+                      --timeout=180s
 
-            echo "Waiting for stable rollout..."
-            kubectl rollout status deployment/booking-frontend \
-              --timeout=180s
+                    echo "Checking canary deployment..."
+                    if kubectl get deployment booking-frontend-canary \
+                         >/dev/null 2>&1; then
 
-            echo "Waiting for canary rollout..."
-            if kubectl get deployment booking-frontend-canary >/dev/null 2>&1; then
-                kubectl rollout status deployment/booking-frontend-canary \
-                  --timeout=180s
-            fi
+                        echo "Waiting for canary deployment..."
+                        kubectl rollout status \
+                          deployment/booking-frontend-canary \
+                          --timeout=180s
+                    else
+                        echo "Canary deployment not found."
+                        exit 1
+                    fi
 
-            echo "Deployment status:"
-            kubectl get deployments
-            kubectl get pods -o wide
-            kubectl get services
-        '''
+                    echo "Final deployment status:"
+                    kubectl get deployments
+                    kubectl get pods -o wide
+                    kubectl get services
+
+                    echo "Production frontend service:"
+                    kubectl get svc ${SERVICE_NAME}
+                '''
+            }
+        }
     }
-}
 
     post {
         success {
-            echo "Deployment Successful!"
-            cleanWs()
+            echo 'Deployment Successful!'
             sh 'docker image prune -f'
+            cleanWs()
         }
 
         failure {
-            echo "Deployment Failed!"
+            echo 'Deployment Failed! Check the stage logs.'
             cleanWs()
         }
     }
 }
-
